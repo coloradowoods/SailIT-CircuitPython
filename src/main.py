@@ -1,198 +1,181 @@
+import sail_display
+import sail_location
+import sail_state
 import displayio
 import rgbmatrix
 import board
-import framebufferio
+
 from digitalio import DigitalInOut,Direction,Pull
 import rotaryio
-import adafruit_display_text.label
-import terminalio
+import storage
 #from adafruit_bitmap_font import bitmap_font
 import time
-#from math import sin
 import busio
-import adafruit_mpu6050
-
-bit_depth_value = 6
-unit_width = 64
-unit_height = 64
-chain_width = 1
-chain_height = 1
-serpentine_value = True
-
-width_value = unit_width*chain_width
-height_value = unit_height*chain_height
+import adafruit_lsm303_accel
+import adafruit_lsm303dlh_mag
 
 displayio.release_displays()
 
 matrix = rgbmatrix.RGBMatrix(
-    width = width_value, height=height_value, bit_depth=bit_depth_value,
+    width = 64,
+    height = 64,
+    bit_depth = 3,
     rgb_pins = [board.GP2, board.GP3, board.GP6, board.GP7, board.GP8, board.GP9],
-    addr_pins = [board.GP10, board.GP15, board.GP14, board.GP20, board.GP22],
-    clock_pin = board.GP11, latch_pin=board.GP12, output_enable_pin=board.GP13,
-    tile = chain_height, serpentine=serpentine_value,
+    addr_pins = [board.GP10, board.GP15, board.GP14, board.GP27, board.GP28],
+    clock_pin = board.GP11,
+    latch_pin=board.GP12,
+    output_enable_pin=board.GP13,
+    tile = 1,
+    serpentine = False,
     doublebuffer = True)
-
-DISPLAY = framebufferio.FramebufferDisplay(matrix, auto_refresh=True,rotation=0)
-
-now = t0 =time.monotonic_ns()
-append_flag = 0
-
-class RGB_Api():
-    def __init__(self):
-
-        #Set text
-        self.txt_str = "Sail IT"
-        self.txt_color = 0x00ffff
-        self.txt_x = 2
-        self.txt_y = 32
-        self.txt_font = terminalio.FONT
-        self.txt_line_spacing = 1
-        self.txt_scale = 1
-
-        #Set scroll
-        self.scroll_speed = 30
-
-    
-    #@brief:  Display a text in static mode
-    #@param:  self
-    #@retval: None
-    def display_time(self, countdown, color, offset, pitch, course):
-        countdown_display = adafruit_display_text.label.Label(
-            self.txt_font,
-            color = color,
-            scale = 2,
-            text = countdown,
-            line_spacing = self.txt_line_spacing
-            )
-        countdown_display.x = 2
-        countdown_display.y = 10
-        
-        if offset > 0:
-            offset_display = adafruit_display_text.label.Label(
-                self.txt_font,
-                color = 0xffffff,
-                scale = 1,
-                text = str(offset),
-                line_spacing = self.txt_line_spacing
-                )
-        elif offset < 0:
-            offset_display = adafruit_display_text.label.Label(
-                self.txt_font,
-                color = 0xff0000,
-                scale = 1,
-                text = str(-offset),
-                line_spacing = self.txt_line_spacing
-                )
-        if offset !=0:
-            offset_display.x = 52
-            offset_display.y =10
-
-        course_display = adafruit_display_text.label.Label(
-            self.txt_font,
-            color = 0xffff00,
-            scale = 1,
-            text = course,
-            line_spacing = self.txt_line_spacing
-            )
-        course_display.x = 2
-        course_display.y =58
-
-
-        aa = "{angle:.1f}".format(angle = pitch)
-        pitch_display = adafruit_display_text.label.Label(
-            self.txt_font,
-            color = 0x0000ff,
-            scale = 1,
-            text = aa,
-            line_spacing = self.txt_line_spacing
-            )        
-        pitch_display.x = 2
-        pitch_display.y = 28
-
-        
-        GROUP = displayio.Group()
-        GROUP.append(countdown_display)
-        if offset !=0:
-            GROUP.append(offset_display)
-        GROUP.append(course_display)
-        GROUP.append(pitch_display)
-        DISPLAY.root_group = GROUP
-        DISPLAY.refresh()
-
 
 import adafruit_gps
 
 if __name__ == '__main__':
-    # Setup Time
-    start_time = 295
-    m=5
-    s=0
-    displaytime=""
-    start = time.time()
+    # Setup
+    state = sail_state.state_api()
+
+    locations = sail_location.locations_api()
+    locations.load()
     
     # Setup Encoder
-    encoder = rotaryio.IncrementalEncoder( board.GP16, board.GP17 )
-    button = DigitalInOut(board.GP18)
-    button.pull = Pull.UP
-    
+    select_encoder = rotaryio.IncrementalEncoder( board.GP20, board.GP21 )
+    select_button = DigitalInOut(board.GP22)
+    select_button.pull = Pull.UP
+
+    mode_encoder = rotaryio.IncrementalEncoder( board.GP16, board.GP17 )
+    mode_button = DigitalInOut(board.GP18)
+    mode_button.pull = Pull.UP
+
     # Setup Accelerometer
     i2c = busio.I2C(scl=board.GP1, sda=board.GP0) # SCL, SDA
-    mpu = adafruit_mpu6050.MPU6050(i2c)
-    
+    sensor = adafruit_lsm303dlh_mag.LSM303DLH_Mag(i2c)
+    accel = adafruit_lsm303_accel.LSM303_Accel(i2c)
+    #print(sensor.calibrate())
+
     # Setup GPS
-    #RX = board.GP1
-    #TX = board.GP0
+    uart = busio.UART(board.GP4, board.GP5, baudrate=9600, timeout=10)
+    gps = adafruit_gps.GPS(uart, debug=False)  # Use UART/pyserial
+    gps.send_command(b"PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
+    gps.send_command(b"PMTK220,1000")
+    my_location = 40.358752, -105.226105
     
-    #i2cgps = busio.I2C(scl=board.GP1, sda=board.GP0)
-    #gps = adafruit_gps.GPS(i2cgps, True)
-    #uart = busio.UART(TX, RX, baudrate=9600, timeout=30)
-    #uart.reset_input_buffer()
-    #uart.write(b'PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
-#     uart.write(b'PMTK220,1000')
-    #gps = adafruit_gps.GPS(uart, True)
-    #gps.send_command(b'PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
-    #gps.send_command(b'PMTK220,1000')
-    last_print = time.monotonic()
-    # Setup Display
-    RGB = RGB_Api()
+    # Setup Didplay
+    RGB = sail_display.RGB_Api(matrix)
     GROUP = displayio.Group()
-    oldDisplayTime = ""
-    loc = ""
+
+    # Setup Remote Control
+    remote_a_pin = DigitalInOut(board.GP19)
+    remote_a_pin.direction = Direction.INPUT
+    remote_a_pin.pull = Pull.UP
+
+    remote_d_pin = DigitalInOut(board.GP26)
+    remote_d_pin.direction = Direction.INPUT
+    remote_d_pin.pull = Pull.UP
+    selection = 0
+    
+    
+    start_time = time.monotonic()
+
+    # calibration for magnetometer X (min, max), Y and Z
+    #hardiron_calibration = [[1000, -1000], [1000, -1000], [1000, -1000]]
+
+    # Update the high and low extremes
+    #while time.monotonic() - start_time < 10.0:
+    #    magval = sensor.magnetic
+    #    print("Calibrating - X:{0:10.2f}, Y:{1:10.2f}, Z:{2:10.2f} uT".format(*magval))
+    #    for i, axis in enumerate(magval):
+    #        hardiron_calibration[i][0] = min(hardiron_calibration[i][0], axis)
+    #        hardiron_calibration[i][1] = max(hardiron_calibration[i][1], axis)
+    #print("Calibration complete:")
+    #print("hardiron_calibration =", hardiron_calibration)
+    
+    ## CalibratedData = ( unCalibratedData – Offset ) / Scaling Factor
+    
     
     while True:
-        offset = encoder.position
-        if button.value == False:
-            start = time.time()
-            encoder.position = 0
+        # Process Mode Encoder
+        state.mode_index = mode_encoder.position
+        mode_encoder.position = state.mode_index        
+
         
-        #gps.update()
-        #current = time.monotonic()
-        #if uart.in_waiting > 0:
-        #    received_data = uart.read(uart.in_waiting)
-        #    print(f"Received: {received_data.decode()}")
-        #if current - last_print >= 1.0 and False:
-        #    last_print = current
-        #    if not gps.has_fix:
-        #        loc = 'No Sat'
-        #        continue
-        #    print('=' * 40)  # Print a separator line.
-        #    loc = 'Lat: {0:.6f} degrees'.format(gps.latitude)
-        #    print('Longitude: {0:.6f} degrees'.format(gps.longitude))
-        #print("Fix quality: {}".format(gps.fix_quality))
-        dnow = start_time - (time.time()-start) + offset
-        # Calculate hour min seconds
-        m,s = divmod(dnow,60)
-        h,m = divmod(m,60)
-        displayTime = "%01d:%02d" % (m,s)
-        if oldDisplayTime != displayTime:
-            #print("Acceleration: tilt:%.2f, pitch: %.2f, roll: %.2f degrees" % (mpu.angles))
-            color = 0x00ff00 #green
-            if m < 4 and m > 1:
-                color = 0xffff00 #green
-            if m < 1:
-                color = 0xff0000 #green
-            RGB.display_time(displayTime, color, offset, mpu.angles[2], loc)
-            print(displayTime)
-            oldDisplayTime = displayTime
-        time.sleep(.1)
+        print(sensor.read_magnetic())
+        state.compass_bearing = locations.compass_bearing(sensor.read_magnetic())
+        state.pitch = locations.angles(accel.acceleration)[2]
+        gps.update()
+        if not gps.has_fix:
+            state.speed = 0
+            state.gps_satellites = gps.satellites
+        else:
+            #state.speed = gps.speed_knots
+            state.gps_satellites = gps.satellites
+
+        if remote_a_pin.value:
+            state.start_timer()
+            mode_encoder.position = state._mode_index
+        
+
+        # Process Value Encoder
+        if state.has_mode_changed == True:
+            print("mode changed")
+            if state.mode == "Course":
+                select_encoder.position = state.course_bouy_index
+            elif state.mode == "Start":
+                print("Resetting selection")
+                select_encoder.position = state.time_offset
+                state.position = state.time_offset
+            elif state.mode == "Bouys":
+                select_encoder.position = state.bouy_index
+                state.position = state.bouy_index
+  
+         # Get Selection Value
+        state.selection = select_encoder.position 
+        select_encoder.position = state.selection 
+  
+        
+        if state.mode == "Start":
+            if select_button.value == False or remote_a_pin.value:
+                state.start_timer()
+                mode_encoder.position = state._mode_index
+            if mode_button.value == False or remote_d_pin.value:
+                print("Mode Click")
+                state.starting = False
+                select_encoder.position = state.time_offset
+        if state.mode == "Course":
+            if select_button.value == False:
+                print("Selection Click")
+                state.update_course()
+            if mode_button.value == False:
+                state.course = ""
+        if state.mode == "Bouys":
+            bouy_location = locations.get_location(state.bouy)
+            
+            state.latitude = bouy_location[0]
+            state.longitude = bouy_location[1]
+            state.bearing = locations.bearing(my_location, bouy_location)
+            state.distance = locations.distance(my_location, bouy_location)
+            if mode_button.value == False or remote_d_pin.value:
+                locations.save()
+        if state.mode == "GPS":
+            state.latitude = gps.latitude
+            state.longitude = gps.longitude       
+        if state.mode == "Race":
+            bouy_location = locations.get_location(state.race_bouy)
+            
+            state.latitude = bouy_location[0]
+            state.longitude = bouy_location[1]
+            state.bearing = locations.bearing(my_location, bouy_location)
+            state.distance = locations.distance(my_location, bouy_location)
+   
+
+            
+        if state.mode == "Start" and state.starting == True:
+            state.update_time()
+            mode_encoder.position = state.mode_index
+
+            if state.has_time_changed == True:
+                RGB.display(state)
+        else:
+            RGB.display(state)
+        time.sleep(.2)
 

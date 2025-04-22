@@ -11,26 +11,9 @@ CircuitPython helper library for the MPU6050 6-DoF Accelerometer and Gyroscope.
 This driver requires too much RAM to be used on SAMD21 based devices.
 
 
-* Author(s): Bryan Siepert
+* Author(s): Steve Wood
 
-Implementation Notes
---------------------
 
-**Hardware:**
-
-* `Adafruit MPU-6050 6-DoF Accel and Gyro Sensor
-  <https://www.adafruit.com/product/3886>`_ (Product ID: 3886)
-
-**Software and Dependencies:**
-
-* Adafruit CircuitPython firmware for the supported boards:
-  https://circuitpython.org/downloads
-
-* Adafruit's Bus Device library:
-  https://github.com/adafruit/Adafruit_CircuitPython_BusDevice
-
-* Adafruit's Register library:
-  https://github.com/adafruit/Adafruit_CircuitPython_Register
 
 """
 
@@ -38,7 +21,7 @@ Implementation Notes
 
 __version__ = "0.0.0+auto.0"
 __repo__ = "https://github.com/adafruit/Adafruit_CircuitPython_MPU6050.git"
-
+import math
 from math import radians
 from time import sleep
 from adafruit_register.i2c_struct import UnaryStruct, ROUnaryStruct
@@ -54,7 +37,7 @@ except ImportError:
     pass
 
 _MPU6050_DEFAULT_ADDRESS = 0x68  # MPU6050 default i2c address w/ AD0 low
-_MPU6050_DEVICE_ID = 0x68  # The correct MPU6050_WHO_AM_I value
+_MPU6050_DEVICE_ID = 0x71  # The correct MPU6050_WHO_AM_I value
 
 _MPU6050_SELF_TEST_X = 0x0D  # Self test factory calibrated values register
 _MPU6050_SELF_TEST_Y = 0x0E  # Self test factory calibrated values register
@@ -210,6 +193,7 @@ class MPU6050:  # pylint: disable=too-many-instance-attributes
         self.i2c_device = i2c_device.I2CDevice(i2c_bus, address)
 
         if self._device_id != _MPU6050_DEVICE_ID:
+            print(self._device_id, _MPU6050_DEVICE_ID)
             raise RuntimeError("Failed to find MPU6050 - check your wiring!")
 
         self.reset()
@@ -272,6 +256,14 @@ class MPU6050:  # pylint: disable=too-many-instance-attributes
         raw_temperature = self._raw_temp_data
         temp = (raw_temperature / 340.0) + 36.53
         return temp
+    
+    @property
+    def temperaturef(self) -> float:
+        """The current temperature in  º Farenheit"""
+        raw_temperature = self._raw_temp_data
+        temp = (raw_temperature / 340.0) + 36.53
+        return (temp * 9/5) +32
+
 
     @property
     def acceleration(self) -> Tuple[float, float, float]:
@@ -286,6 +278,34 @@ class MPU6050:  # pylint: disable=too-many-instance-attributes
         accel_z = (raw_data[2] * self._accel_scale) * STANDARD_GRAVITY
         return (accel_x, accel_y, accel_z)
 
+    @property
+    def gacceleration(self) -> Tuple[float, float, float]:
+        """Acceleration X, Y, and Z axis data in :math:`m/s^2`"""
+        raw_data = self._raw_accel_data
+        return self.scale_gaccel([raw_data[0][0], raw_data[1][0], raw_data[2][0]])
+
+    def scale_gaccel(self, raw_data) -> Tuple[float, float, float]:
+        """Scale raw X, Y, and Z axis data to :math:`g`"""
+        accel_x = (raw_data[0] * self._accel_scale)
+        accel_y = (raw_data[1] * self._accel_scale)
+        accel_z = (raw_data[2] * self._accel_scale)
+        return (accel_x, accel_y, accel_z)
+
+    @property
+    def angles(self) -> Tuple[float, float, float]:
+        """Acceleration X, Y, and Z axis data in :math:`m/s^2`"""
+        acc = self.gacceleration
+        x = acc[0]
+        y = acc[1]
+        z = acc[2]
+        if x > 1:
+            x = 1
+        if y > 1:
+            y = 1
+        if z > 1:
+            z = 1
+        return (math.acos(z)/2/math.pi*360, math.atan(x/z)/2/math.pi*360, math.atan(y/z)/2/math.pi*360)
+    
     @property
     def gyro(self) -> Tuple[float, float, float]:
         """Gyroscope X, Y, and Z axis data in :math:`º/s`"""
