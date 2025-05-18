@@ -1,6 +1,8 @@
 import sail_display
 import sail_location
 import sail_state
+import sail_motion
+import sail_calibrate
 import displayio
 import rgbmatrix
 import board
@@ -36,6 +38,9 @@ if __name__ == '__main__':
     state = sail_state.state_api()
 
     locations = sail_location.locations_api()
+    motion = sail_motion.motion_api()
+    mag_cal = sail_calibrate.calibrate_api(300)
+    mag_cal.load("/mag_cal.csv")
     locations.load()
     
     # Setup Encoder
@@ -48,17 +53,17 @@ if __name__ == '__main__':
     mode_button.pull = Pull.UP
 
     # Setup Accelerometer
+    reading = 0,0,0
     i2c = busio.I2C(scl=board.GP1, sda=board.GP0) # SCL, SDA
-    sensor = adafruit_lsm303dlh_mag.LSM303DLH_Mag(i2c)
+    sensor = adafruit_lsm303dlh_mag.LSM303DLH_Mag(i2c, offset=mag_cal.offset, scale=mag_cal.scale)
     accel = adafruit_lsm303_accel.LSM303_Accel(i2c)
-    #print(sensor.calibrate())
 
     # Setup GPS
     uart = busio.UART(board.GP4, board.GP5, baudrate=9600, timeout=10)
     gps = adafruit_gps.GPS(uart, debug=False)  # Use UART/pyserial
     gps.send_command(b"PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
     gps.send_command(b"PMTK220,1000")
-    my_location = 40.358752, -105.226105
+    my_location = 0,0 #40.358752, -105.226105
     
     # Setup Didplay
     RGB = sail_display.RGB_Api(matrix)
@@ -76,39 +81,23 @@ if __name__ == '__main__':
     
     
     start_time = time.monotonic()
-
-    # calibration for magnetometer X (min, max), Y and Z
-    #hardiron_calibration = [[1000, -1000], [1000, -1000], [1000, -1000]]
-
-    # Update the high and low extremes
-    #while time.monotonic() - start_time < 10.0:
-    #    magval = sensor.magnetic
-    #    print("Calibrating - X:{0:10.2f}, Y:{1:10.2f}, Z:{2:10.2f} uT".format(*magval))
-    #    for i, axis in enumerate(magval):
-    #        hardiron_calibration[i][0] = min(hardiron_calibration[i][0], axis)
-    #        hardiron_calibration[i][1] = max(hardiron_calibration[i][1], axis)
-    #print("Calibration complete:")
-    #print("hardiron_calibration =", hardiron_calibration)
-    
-    ## CalibratedData = ( unCalibratedData – Offset ) / Scaling Factor
     
     
     while True:
         # Process Mode Encoder
         state.mode_index = mode_encoder.position
-        mode_encoder.position = state.mode_index        
-
-        
-        print(sensor.read_magnetic())
-        state.compass_bearing = locations.compass_bearing(sensor.read_magnetic())
-        state.pitch = locations.angles(accel.acceleration)[2]
+        mode_encoder.position = state.mode_index
+        reading = sensor.read_magnetic()
+        state.compass_bearing = locations.compass_bearing(reading)
+        state.roll, state.pitch, state.compass = motion.get_angles(accel.acceleration, reading)
         gps.update()
         if not gps.has_fix:
             state.speed = 0
             state.gps_satellites = gps.satellites
         else:
-            #state.speed = gps.speed_knots
+            state.speed = gps.speed_knots
             state.gps_satellites = gps.satellites
+            my_location = gps.latitude, gps.longitude
 
         if remote_a_pin.value:
             state.start_timer()
@@ -117,7 +106,7 @@ if __name__ == '__main__':
 
         # Process Value Encoder
         if state.has_mode_changed == True:
-            print("mode changed")
+            print("mode changed - " + state.mode + " - " + state.sub_mode)
             if state.mode == "Course":
                 select_encoder.position = state.course_bouy_index
             elif state.mode == "Start":
@@ -131,7 +120,6 @@ if __name__ == '__main__':
          # Get Selection Value
         state.selection = select_encoder.position 
         select_encoder.position = state.selection 
-  
         
         if state.mode == "Start":
             if select_button.value == False or remote_a_pin.value:
@@ -149,13 +137,25 @@ if __name__ == '__main__':
                 state.course = ""
         if state.mode == "Bouys":
             bouy_location = locations.get_location(state.bouy)
-            
-            state.latitude = bouy_location[0]
-            state.longitude = bouy_location[1]
+            if state.sub_mode == "yesno" and state.selection == 1:
+                state.latitude = my_location[0]
+                state.longitude = my_location[1]        
+            else:
+                state.latitude = bouy_location[0]
+                state.longitude = bouy_location[1]
             state.bearing = locations.bearing(my_location, bouy_location)
             state.distance = locations.distance(my_location, bouy_location)
-            if mode_button.value == False or remote_d_pin.value:
-                locations.save()
+            if mode_button.value == False:
+                if state.sub_mode == "":
+                    state.sub_mode = "yesno"
+            if select_button.value == False:
+                if state.sub_mode == "yesno" and state.selection == 2:
+                    state.sub_mode = ""
+                else:
+                    print("Saving Location")
+                    locations.set_location(state.bouy, my_location)
+                    locations.save()
+                    state.sub_mode = ""
         if state.mode == "GPS":
             state.latitude = gps.latitude
             state.longitude = gps.longitude       
@@ -165,17 +165,27 @@ if __name__ == '__main__':
             state.latitude = bouy_location[0]
             state.longitude = bouy_location[1]
             state.bearing = locations.bearing(my_location, bouy_location)
-            state.distance = locations.distance(my_location, bouy_location)
-   
-
-            
-        if state.mode == "Start" and state.starting == True:
-            state.update_time()
-            mode_encoder.position = state.mode_index
-
-            if state.has_time_changed == True:
-                RGB.display(state)
-        else:
-            RGB.display(state)
+            state.distance = locations.distance(my_location, bouy_location) 
+        if state.mode == "Compass":
+            if mode_button.value == False:
+                if state.sub_mode == "":
+                    state.sub_mode = "yesno"
+            if select_button.value == False:
+                if state.sub_mode == "yesno" and state.selection == 2:
+                    state.sub_mode = ""
+                else:
+                    state.sub_mode = "x"
+                    mag_cal.reset(reading)       
+            if state.sub_mode == "x" or state.sub_mode == "y" or state.sub_mode == "z":
+                state.calibration_values = mag_cal.record(reading)
+                if mag_cal.count < mag_cal.samples/3:
+                    state.sub_mode = "z"
+                elif mag_cal.count < mag_cal.samples *2/3:
+                    state.sub_mode = "y"
+                if mag_cal.count <= 0:
+                    state.sub_mode = "complete"
+                    mag_cal.save("/mag_cal.csv")
+                    print(mag_cal.offset, mag_cal.scale)
+        RGB.display(state)
         time.sleep(.2)
 

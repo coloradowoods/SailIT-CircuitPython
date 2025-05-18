@@ -27,10 +27,11 @@ class locations_api():
             if bouy == location[0]:
                 return location[1],location[2]
 
-    def set_location(self, bouy, location):
-        for location in locations:
+    def set_location(self, bouy, updated_location):
+        for index, location in enumerate(self.locations):
+            print(index, location)
             if bouy == location[0]:
-                return location[1],location[2]
+                self.locations[index] = bouy, updated_location[0], updated_location[1]
             
     # Rough Calculation of distance (in meters)
     # https://janakiev.com/blog/gps-points-distance-python/

@@ -76,19 +76,64 @@ class RGB_Api():
             group = self.display_text(group, self.PURPLE, 1, str(state.speed) + "kts", 2, 20) 
             group = self.display_text(group, 0x0000ff, 1, "{angle:.1f} deg".format(angle = state.pitch), 2, 38)
         if state.mode == "Bouys":
-            group = self.display_text(group, self.YELLOW, 2, state.bouy, 50, 10)
-            group = self.display_text(group, self.GREEN, 1, str("{direction:.1f}".format(direction = state.bearing)), 2, 24)
-            group = self.display_text(group, self.GREEN, 1, "o".format(angle = state.bearing), 2+6*len(str("{angle:.1f}".format(angle = state.bearing))), 19)
-            if state.distance > 5000:
-                group = self.display_text(group, 0x0000ff, 1, str("{distance:.1f} mi".format(distance = state.distance/5280)), 2, 34)
-            else:
-                group = self.display_text(group, 0x0000ff, 1, str("{distance:.1f} ft".format(distance = state.distance)), 2, 34)
-            group = self.display_text(group, 0x0000ff, 1, str(state.latitude), 2, 44)
-            group = self.display_text(group, 0xffa500, 1, str(state.longitude), 2, 57)
+            if state.sub_mode == "":
+                group = self.display_text(group, self.YELLOW, 2, state.bouy, 50, 10)
+                group = self.display_text(group, self.GREEN, 1, str("{direction:.1f}".format(direction = state.bearing)), 2, 24)
+                group = self.display_text(group, self.GREEN, 1, "o".format(angle = state.bearing), 2+6*len(str("{angle:.1f}".format(angle = state.bearing))), 19)
+                if state.distance > 5000:
+                    group = self.display_text(group, 0x0000ff, 1, str("{distance:.1f} mi".format(distance = state.distance/5280)), 2, 34)
+                else:
+                    group = self.display_text(group, 0x0000ff, 1, str("{distance:.1f} ft".format(distance = state.distance)), 2, 34)
+                group = self.display_text(group, 0x0000ff, 1, str(state.latitude), 2, 44)
+                group = self.display_text(group, 0xffa500, 1, str(state.longitude), 2, 57)
+            elif state.sub_mode == "yesno":
+                group = self.display_text(group, self.YELLOW, 2, state.bouy, 50, 10)
+                group = self.display_text(group, self.GREEN, 1, "Set GPS", 2, 19)
+                if state.selection == 1:
+                    group = self.display_text(group, self.GREEN, 1, "Yes", 2, 29)
+                else:
+                    group = self.display_text(group, self.RED, 1, "No", 2, 29)
+                group = self.display_text(group, 0x0000ff, 1, str(state.latitude), 2, 44)
+                group = self.display_text(group, 0xffa500, 1, str(state.longitude), 2, 57)
         if state.mode == "GPS":
             group = self.display_text(group, self.PURPLE, 1, str(state.speed) + "kts", 2, 17) 
             group = self.display_text(group, 0x0000ff, 1, str(state.gps_satellites) + " sats", 2, 28)
             group = self.display_text(group, 0x0000ff, 1, str(state.latitude), 2, 39)
             group = self.display_text(group, 0xffa500, 1, str(state.longitude), 2, 50)
-
+        if state.mode == "Compass":
+            if state.sub_mode == "":
+                group = self.display_text(group, self.GREEN, 1, str("comp  {direction:.1f}".format(direction = state.compass)), 2, 19)
+                group = self.display_text(group, self.GREEN, 1, str("raw   {direction:.1f}".format(direction = state.compass_bearing)), 2, 29)
+                group = self.display_text(group, self.GREEN, 1, str("pitch {direction:.1f}".format(direction = state.pitch)), 2, 39)
+                group = self.display_text(group, self.GREEN, 1, str("roll  {direction:.1f}".format(direction = state.roll)), 2, 49)
+            elif state.sub_mode == "yesno":
+                group = self.display_text(group, self.GREEN, 1, "Calibrate?", 2, 19)
+                if state.selection == 1:
+                    group = self.display_text(group, self.GREEN, 1, "Yes", 2, 29)
+                else:
+                    group = self.display_text(group, self.RED, 1, "No", 2, 29)
+            elif state.sub_mode == "x":
+                c = state.calibration_values
+                group = self.display_text(group, self.GREEN, 1, str(c[9]), 46, 6)
+                group = self.display_text(group, self.GREEN, 1, "Calib X", 2, 17)
+                group = self.display_text(group, self.GREEN, 1, str("{x:.4f}".format(x = c[0])), 2, 27)
+                group = self.display_text(group, self.GREEN, 1, str("{min:.4f}".format(min = c[1])), 2, 37)
+                group = self.display_text(group, self.GREEN, 1, str("{max:.4f}".format(max = c[2])), 2, 47)
+            elif state.sub_mode == "y":
+                c = state.calibration_values
+                group = self.display_text(group, self.GREEN, 1, str(c[9]), 46, 6)
+                group = self.display_text(group, self.GREEN, 1, "Calib Y", 2, 17)
+                group = self.display_text(group, self.GREEN, 1, str("{x:.4f}".format(x = c[3])), 2, 27)
+                group = self.display_text(group, self.GREEN, 1, str("{min:.4f}".format(min = c[4])), 2, 37)
+                group = self.display_text(group, self.GREEN, 1, str("{max:.4f}".format(max = c[5])), 2, 47)
+            elif state.sub_mode == "z":
+                c = state.calibration_values
+                group = self.display_text(group, self.GREEN, 1, str(c[9]), 46, 6)
+                group = self.display_text(group, self.GREEN, 1, "Calib Z", 2, 17)
+                group = self.display_text(group, self.GREEN, 1, str("{x:.4f}".format(x = c[6])), 2, 27)
+                group = self.display_text(group, self.GREEN, 1, str("{min:.4f}".format(min = c[7])), 2, 37)
+                group = self.display_text(group, self.GREEN, 1, str("{max:.4f}".format(max = c[8])), 2, 47)
+            else:
+                group = self.display_text(group, self.GREEN, 1, state.sub_mode, 2, 19)
         self.DISPLAY.root_group = group
+

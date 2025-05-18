@@ -2,9 +2,11 @@ import time
 
 class state_api():
     def __init__(self):
-        self._mode = ["Course", "Start", "Race", "Sail", "Bouys", "GPS"]
+        self._mode = ["Course", "Start", "Race", "Sail", "Bouys", "GPS", "Compass"]
         self._mode_index = 0
         self._old_mode_index = 0
+        
+        self._sub_mode = ""
         
         self._course_bouys = ["G", "<-", "Clear", "F", "7", "6", "5", "4", "3", "2", "1"]
         self._course_bouy_index = 0
@@ -24,8 +26,13 @@ class state_api():
         self._now = 0
         self._start = time.time()
         self._time_offset = 0
+        
+        self._calibration_count = 0
+        self._calibration_values = 0
     
+        self._compass = 0
         self._pitch = 0
+        self._roll = 0
         self._speed = 0 
         
         self._option = ""
@@ -39,6 +46,18 @@ class state_api():
         
         self._starting = False
         self._selection = 0
+
+    def save(self):
+        with open("/state.csv", "w") as file:
+            file.write(f"{self._course},{location[1]},{location[2]}\n")
+            file.flush()
+    
+    def load(self):
+        locations = []
+        with open("/state.csv", "r") as file:
+            mylist = file.read().splitlines()
+            for settings in mylist:
+                setting = settings.split(",")
 
     @property
     def gps_satellites(self) -> int:
@@ -88,13 +107,21 @@ class state_api():
                 self._selection = value
             self._course_bouy_index = self._selection
         elif self.mode == "Bouys":
-            if value > 8:
-                self._selection = 0
-            elif value < 0:
-                self._selection = 8
-            else:
-                self._selection = value
-            self._bouy_index = self._selection
+            if self.sub_mode == "":
+                if value > 8:
+                    self._selection = 0
+                elif value < 0:
+                    self._selection = 8
+                else:
+                    self._selection = value
+                self._bouy_index = self._selection
+            elif self.sub_mode == "yesno":
+                if value < 1:
+                    self._selection = 2
+                elif value > 2:
+                    self._selection = 1
+                else:
+                    self._selection = value            
         elif self.mode == "Start":
             self._selection = value
             self._time_offset = self._selection
@@ -106,6 +133,15 @@ class state_api():
             else:
                 self._selection = value
             self._race_index = self._selection
+        elif self.mode == "Compass":
+            if self.sub_mode == "yesno":
+                if value < 1:
+                    self._selection = 2
+                elif value > 2:
+                    self._selection = 1
+                else:
+                    self._selection = value
+        
     @property
     def race_bouy(self) -> str:
         """Description"""
@@ -146,19 +182,49 @@ class state_api():
     
     @mode_index.setter
     def mode_index(self, value):
-        self._old_mode_index = self._mode_index
-        if value > 5:
-            self._mode_index = 0
-        elif value < 0:
-            self._mode_index = 5
-        else:
-            self._mode_index = value
-        
+        if self._old_mode_index != value:
+            self.sub_mode = ""
+            self._old_mode_index = self._mode_index
+            if value > 6:
+                self._mode_index = 0
+            elif value < 0:
+                self._mode_index = 6
+            else:
+                self._mode_index = value
     
     @property
     def has_mode_changed(self) -> bool:
         """Description"""
         return self._mode_index != self._old_mode_index
+
+    @property
+    def sub_mode(self) -> str:
+        """Description"""
+        return self._sub_mode
+    
+    @sub_mode.setter
+    def sub_mode(self, value):
+        self._sub_mode = value
+
+    @property
+    def calibration_count(self) -> str:
+        """Description"""
+        return self._calibration_count
+    
+    @calibration_count.setter
+    def calibration_count(self, value):
+        self._calibration_count = value
+
+
+    @property
+    def calibration_values(self) -> str:
+        """Description"""
+        return self._calibration_values
+    
+    @calibration_values.setter
+    def calibration_values(self, value):
+        self._calibration_values = value
+
 
     @property
     def latitude(self) -> float:
@@ -197,6 +263,15 @@ class state_api():
         self._distance = value
     
     @property
+    def compass(self) -> float:
+        """Description"""
+        return self._compass
+    
+    @compass.setter
+    def compass(self, value):
+        self._compass = value
+    
+    @property
     def pitch(self) -> float:
         """Description"""
         return self._pitch
@@ -204,7 +279,16 @@ class state_api():
     @pitch.setter
     def pitch(self, value):
         self._pitch = value
+
+    @property
+    def roll(self) -> float:
+        """Description"""
+        return self._roll
     
+    @roll.setter
+    def roll(self, value):
+        self._roll = value
+
     @property
     def speed(self) -> float:
         """Description"""

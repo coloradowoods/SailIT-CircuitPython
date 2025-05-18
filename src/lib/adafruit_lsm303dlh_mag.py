@@ -134,7 +134,8 @@ class LSM303DLH_Mag:
     _BUFFER = bytearray(6)
 
     def __init__(self, i2c: I2C,
-        offset=(-10.3182, 13.1818, -6.5306), scale=(1.03862, 0.913352, 1.06122)) -> None:
+        #offset=(0, 0, 0), scale=(1, 1, 1)) -> None:
+        offset=(-6.31818, 27.9545, -50.102), scale=(0.767553, 0.712207, 3.41212)) -> None:
         self._mag_device = I2CDevice(i2c, _ADDRESS_MAG)
         self._write_u8(
             self._mag_device, _REG_MAG_MR_REG_M, 0x00
