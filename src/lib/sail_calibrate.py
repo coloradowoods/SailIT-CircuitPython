@@ -15,15 +15,12 @@ class calibrate_api():
         self._offset = (0, 0, 0)
         self._scale = (1, 1, 1)
         self._samples = samples
+        self._readings = []
     
     @property
     def count(self) -> int:
         """Countdown for calibration"""
         return self._count
-    
-    @count.setter
-    def count(self, value):
-        self._count = value
 
     @property
     def samples(self) -> int:
@@ -44,6 +41,16 @@ class calibrate_api():
         """Number of samples taken for calibration"""
         return self._scale
     
+    @property
+    def next_angle(self) -> int:
+        """Next Angle to take calibration"""
+        return (self._count) * 5
+    
+    def save_readings(self, filename):
+        with open(filename, "w") as file:
+            for reading in self._readings:
+                file.write(f"{reading[0]},{reading[1]},{reading[2]},{reading[3]}\n")
+            file.flush()
     def save(self, filename):
         with open(filename, "w") as file:
             file.write(f"{self._offset[0]},{self._offset[1]},{self._offset[2]},{self._scale[0]},{self._scale[1]},{self._scale[2]}\n")
@@ -65,14 +72,19 @@ class calibrate_api():
             self._offset = (0, 0, 0)
             self._scale = (1, 1, 1)
     def reset(self, reading):
+        print('Resetting Calibration')
         self._offset = (0, 0, 0)
         self._scale = (1, 1, 1)
         self._minx = self._maxx = reading[0]
         self._miny = self._maxy = reading[1]
         self._minz = self._maxz = reading[2]   
-        self._count = self._samples
+        self._count = 0
+        self._readings = []
         
     def record(self, reading):
+        this_reading = self.next_angle, reading[0], reading[1], reading[2]
+        print(this_reading)
+        self._readings.append(this_reading)
         self._minx = min(self._minx, reading[0])
         self._maxx = max(self._maxx, reading[0])
         self._miny = min(self._miny, reading[1])
@@ -98,6 +110,6 @@ class calibrate_api():
         if avg_delta_z != 0:    
             scale_z = avg_delta / avg_delta_z
 
-            self._scale = (scale_x, scale_y, scale_z)
-        self._count -= 1
-        return reading[0], self._minx, self._maxx, reading[1], self._miny, self._maxy, reading[2], self._minz, self._maxz, self._count
+        self._scale = (scale_x, scale_y, scale_z)
+        self._count += 1
+        return (self._count -1) * 5, reading[0], reading[1], reading[2]

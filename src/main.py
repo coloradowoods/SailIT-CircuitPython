@@ -36,10 +36,10 @@ import adafruit_gps
 if __name__ == '__main__':
     # Setup
     state = sail_state.state_api()
-
+    total_readings = 72
     locations = sail_location.locations_api()
     motion = sail_motion.motion_api()
-    mag_cal = sail_calibrate.calibrate_api(300)
+    mag_cal = sail_calibrate.calibrate_api(total_readings)
     mag_cal.load("/mag_cal.csv")
     locations.load()
     
@@ -90,6 +90,8 @@ if __name__ == '__main__':
         reading = sensor.read_magnetic()
         state.compass_bearing = locations.compass_bearing(reading)
         state.roll, state.pitch, state.compass = motion.get_angles(accel.acceleration, reading)
+        state.roll = reading[0]
+        state.pitch = reading[1]
         gps.update()
         if not gps.has_fix:
             state.speed = 0
@@ -99,7 +101,7 @@ if __name__ == '__main__':
             state.gps_satellites = gps.satellites
             my_location = gps.latitude, gps.longitude
 
-        if remote_a_pin.value:
+        if remote_a_pin.value and state.sub_mode != "calibrating":
             state.start_timer()
             mode_encoder.position = state._mode_index
         
@@ -170,21 +172,25 @@ if __name__ == '__main__':
             if mode_button.value == False:
                 if state.sub_mode == "":
                     state.sub_mode = "yesno"
-            if select_button.value == False:
+            if select_button.value == False and state.sub_mode != "calibrating":
                 if state.sub_mode == "yesno" and state.selection == 2:
                     state.sub_mode = ""
                 else:
-                    state.sub_mode = "x"
+                    state.sub_mode = "calibrating"
+                    sensor = adafruit_lsm303dlh_mag.LSM303DLH_Mag(i2c, offset=(0,0,0), scale=(1,1,1))
                     mag_cal.reset(reading)       
-            if state.sub_mode == "x" or state.sub_mode == "y" or state.sub_mode == "z":
-                state.calibration_values = mag_cal.record(reading)
-                if mag_cal.count < mag_cal.samples/3:
-                    state.sub_mode = "z"
-                elif mag_cal.count < mag_cal.samples *2/3:
-                    state.sub_mode = "y"
-                if mag_cal.count <= 0:
+            if state.sub_mode == "calibrating":
+                if select_button.value == False or remote_a_pin.value:
+                    state.calibration_values = mag_cal.record(reading)
+                else:
+                    state.calibration_values = mag_cal.next_angle, reading[0], reading[1], reading[2]
+               
+                state.calibration_next_angle = mag_cal.next_angle
+               
+                if mag_cal.count > total_readings:
                     state.sub_mode = "complete"
                     mag_cal.save("/mag_cal.csv")
+                    mag_cal.save_readings("/readings.csv")
                     print(mag_cal.offset, mag_cal.scale)
         RGB.display(state)
         time.sleep(.2)

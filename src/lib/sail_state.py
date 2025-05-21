@@ -29,6 +29,7 @@ class state_api():
         
         self._calibration_count = 0
         self._calibration_values = 0
+        self._calibration_next_angle = 0
     
         self._compass = 0
         self._pitch = 0
@@ -67,6 +68,16 @@ class state_api():
     @gps_satellites.setter
     def gps_satellites(self, value):
         self._gps_satellites = value
+    
+    @property
+    def calibration_next_angle(self) -> int:
+        """Description"""
+        return self._calibration_next_angle
+    
+    @calibration_next_angle.setter
+    def calibration_next_angle(self, value):
+        self._calibration_next_angle = value
+    
     
     @property
     def course(self) -> str:
